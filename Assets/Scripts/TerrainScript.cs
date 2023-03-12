@@ -1,125 +1,8 @@
 using System;
-using System.Text;
+using System.Collections.Generic;
+using System.Drawing;
 using UnityEditor;
 using UnityEngine;
-
-public class FixedPoint
-{
-    public const byte MaxPointDigit = 8;
-    public const int MultiplerOffset = 100000000;
-
-    public int HighValue { get; private set; }
-    public int LowValue { get; private set; }
-    public long RawValue
-    {
-        get { return ((long)HighValue * MultiplerOffset) + LowValue; }
-        set { HighValue = (int)(value / MultiplerOffset); LowValue = (int)(value % MultiplerOffset); }
-    }
-
-    public FixedPoint()
-    {
-        HighValue = 0;
-        LowValue = 0;
-    }
-    public FixedPoint(Int32 num)
-    {
-        HighValue = num;
-        LowValue = 0;
-    }
-    public FixedPoint(float num)
-    {
-        HighValue = (int)num;
-        LowValue = (int)((num - (int)num) * MultiplerOffset);
-    }
-    public FixedPoint(double num)
-    {
-        HighValue = (int)num;
-        LowValue = (int)((num - (int)num) * MultiplerOffset);
-    }
-
-    public static FixedPoint operator -(FixedPoint a, FixedPoint b) => new FixedPoint() { RawValue = a.RawValue - b.RawValue };
-    public static FixedPoint operator -(FixedPoint a, int b) => new FixedPoint() { RawValue = a.RawValue - new FixedPoint(b).RawValue };
-    public static FixedPoint operator -(int a, FixedPoint b) => new FixedPoint() { RawValue = new FixedPoint(a).RawValue - b.RawValue };
-
-    public override string ToString()
-    {
-        StringBuilder sb = new StringBuilder(HighValue.ToString() + ".");
-        string lowValueStr = LowValue.ToString();
-        for (int i = 0; i < MaxPointDigit - lowValueStr.Length; i++)
-        {
-            sb.Append('0');
-        }
-        sb.Append(lowValueStr);
-        return sb.ToString();
-    }
-
-    public string ToString(string fmt)
-    {
-        StringBuilder sb = new StringBuilder(HighValue.ToString() + ".");
-        string lowValueStr = LowValue.ToString();
-        if (fmt.StartsWith("F") || fmt.StartsWith("f"))
-        {
-            StringBuilder lowValueStringBuilder = new StringBuilder();
-            for (int i = 0; i < MaxPointDigit - lowValueStr.Length; i++)
-            {
-                lowValueStringBuilder.Append('0');
-            }
-            lowValueStringBuilder.Append(lowValueStr);
-            lowValueStr = lowValueStringBuilder.ToString();
-
-            int digits = Convert.ToInt32(fmt.Substring(1));
-            for (int i = 0; i < digits; i++)
-            {
-                sb.Append(lowValueStr[i]);
-            }
-            return sb.ToString();
-        }
-
-        for (int i = 0; i < MaxPointDigit - lowValueStr.Length; i++)
-        {
-            sb.Append('0');
-        }
-        sb.Append(lowValueStr);
-        return sb.ToString();
-    }
-
-    public int ToInt32()
-    {
-        return HighValue;
-    }
-
-    public float ToFloat()
-    {
-        float result = HighValue + LowValue / (float)MultiplerOffset;
-        return HighValue + LowValue / (float)MultiplerOffset;
-    }
-}
-
-public class Tile
-{
-    public Vector2Int GridIndex { get; set; }
-    public Vector3 WorldPosition { get; set; }
-    public byte Cost { get; set; }
-    public ushort BestCost { get; set; }
-#if UNITY_EDITOR
-    public float HeightForTileCube { get; set; }
-#endif
-
-    public Tile(Vector2Int gridIndex, Vector3 worldPosition)
-    {
-        GridIndex = gridIndex;
-        WorldPosition = worldPosition;
-        Cost = 1;
-        BestCost = ushort.MaxValue;
-    }
-
-    public void IncreaseCost(int amount)
-    {
-        if (Cost == byte.MaxValue) { return; }
-        if (amount + Cost >= 255) { Cost = byte.MaxValue; }
-        Cost += (byte)amount;
-    }
-}
 
 public class TerrainScript : MonoBehaviour
 {
@@ -133,23 +16,17 @@ public class TerrainScript : MonoBehaviour
     }
 #endif
 
-    [SerializeField] private float slopeThreshHold = 0.6f;
-    [SerializeField] private float slopeMultiplierForCost = 1.0f;
+    [SerializeField] private float _slopeThreshHold = 0.6f;
+    [SerializeField] private float _slopeMultiplierForCost = 1.0f;
+    [SerializeField] private Grid _destinationGrid;
 #if UNITY_EDITOR
-    [SerializeField] private DebugOption debugOption = DebugOption.None;
+    [SerializeField] private DebugOption _debugOption = DebugOption.None;
 #endif
-    public Tile[,] tiles { get; private set; }
+    public Grid[,] _grids { get; private set; }
 
     private void Start()
     {
         GenerateTileInfo();
-    }
-
-    void OnDrawGizmosSelected()
-    {
-        if (debugOption != DebugOption.ShowCostField)
-            return;
-        DrawCostFieldCubes();
     }
 
     public void GenerateTileInfo()
@@ -160,7 +37,7 @@ public class TerrainScript : MonoBehaviour
 
         TerrainData terrainData = terrain.terrainData;
         int resolution = terrainData.heightmapResolution - 1;
-        tiles = new Tile[resolution, resolution];
+        _grids = new Grid[resolution, resolution];
 
         for (int i = 0; i < resolution; i++)
         {
@@ -184,12 +61,12 @@ public class TerrainScript : MonoBehaviour
                     });
                 float heightForTileCube = maxHeight - minHeight;
                 Vector3 worldPosition = transform.position + (new Vector3(1.0f, heightForTileCube, 1.0f) * 0.5f) + new Vector3(i, minHeight, j);
-                tiles[i, j] = new Tile(new Vector2Int(i, j), worldPosition);
+                _grids[i, j] = new Grid(new Vector2Int(i, j), worldPosition);
 #if UNITY_EDITOR
-                tiles[i, j].HeightForTileCube = heightForTileCube;
+                _grids[i, j].HeightForTileCube = heightForTileCube;
 #endif
 
-                if (heightForTileCube < slopeThreshHold)
+                if (heightForTileCube < _slopeThreshHold)
                 {
                     Collider[] obstacles = Physics.OverlapBox(new Vector3(i + 0.5f, minHeight, j + 0.5f), Vector3.one * 0.49f, Quaternion.identity, LayerMask.GetMask("Obstacle"));
                     bool hasObstacle = false;
@@ -197,54 +74,224 @@ public class TerrainScript : MonoBehaviour
                     {
                         if (collider.gameObject.layer == 6)
                         {
-                            tiles[i, j].Cost = byte.MaxValue;
+                            _grids[i, j].Cost = byte.MaxValue;
                             hasObstacle = true;
                         }
                     }
 
                     if (hasObstacle == false)
-                        tiles[i, j].Cost = (byte)(new Vector2(1.0f, Mathf.Pow(heightForTileCube * slopeMultiplierForCost, 2)).magnitude);
+                        _grids[i, j].Cost = (byte)(new Vector2(1.0f, Mathf.Pow(heightForTileCube * _slopeMultiplierForCost, 2)).magnitude);
                 }
                 else
                 {
-                    tiles[i, j].Cost = byte.MaxValue;
+                    _grids[i, j].Cost = byte.MaxValue;
                 }
             }
         }
         Debug.Log("Tile Info Generated!!!");
     }
 
+    public void GenerateIntegrationField(Vector2Int destination)
+    {
+        //if (_grids[destination.x, destination.y].Cost == byte.MaxValue)
+        //return;
+
+        _grids[destination.x, destination.y].Cost = 0;
+        _grids[destination.x, destination.y].BestCost = 0;
+        _destinationGrid = _grids[destination.x, destination.y];
+
+        Queue<Grid> gridQueue = new Queue<Grid>();
+        gridQueue.Enqueue(_destinationGrid);
+
+        while (gridQueue.Count > 0)
+        {
+            Grid currentGrid = gridQueue.Dequeue();
+            List<Grid> neighbourGrids = GetNeighbourGrids(currentGrid.Index, GridDirection.CardinalDirections);
+            foreach (Grid neighbourGrid in neighbourGrids)
+            {
+                if (neighbourGrid.Cost == byte.MaxValue)
+                    continue;
+
+                if (neighbourGrid.Cost + currentGrid.BestCost < neighbourGrid.BestCost)
+                {
+                    neighbourGrid.BestCost = (ushort)(neighbourGrid.Cost + currentGrid.BestCost);
+                    gridQueue.Enqueue(neighbourGrid);
+                }
+            }
+        }
+    }
+
+    public void GenerateFlowField()
+    {
+        foreach (Grid currentGrid in _grids)
+        {
+            List<Grid> neighbourGrids = GetNeighbourGrids(currentGrid.Index, GridDirection.AllDirections);
+
+            int bestCost = currentGrid.BestCost;
+            foreach (Grid neighbourGrid in neighbourGrids)
+            {
+                if (neighbourGrid.BestCost < bestCost)
+                {
+                    bestCost = neighbourGrid.BestCost;
+                    if (currentGrid.BestCost == ushort.MaxValue)
+                        currentGrid.BestDirection = GridDirection.None;
+                    else
+                        currentGrid.BestDirection = GridDirection.GetDirectionFromV2I(neighbourGrid.Index - currentGrid.Index);
+                }
+            }
+        }
+    }
+
+    private List<Grid> GetNeighbourGrids(Vector2Int gridIndex, List<GridDirection> directions)
+    {
+        List<Grid> neighbourGrids = new List<Grid>();
+        foreach (Vector2Int currentDirection in directions)
+        {
+            Grid neighbourGrid = GetGridAtRelativePos(gridIndex, currentDirection);
+            if (neighbourGrid != null)
+                neighbourGrids.Add(neighbourGrid);
+        }
+        return neighbourGrids;
+    }
+
+    private Grid GetGridAtRelativePos(Vector2Int originalPos, Vector2Int relativePos)
+    {
+        Vector2Int position = originalPos + relativePos;
+        if (position.x < 0 || position.x >= _grids.GetLength(0) || position.y < 0 || position.y >= _grids.GetLength(1))
+            return null;
+        return _grids[position.x, position.y];
+    }
+
+
 #if UNITY_EDITOR
-    public DebugOption GetDebugOption() { return debugOption; }
+    private void OnDrawGizmosSelected()
+    {
+        switch (_debugOption)
+        {
+            case DebugOption.None:
+                break;
+            case DebugOption.ShowCostField:
+                DrawCostFieldCubes();
+                break;
+            case DebugOption.ShowBestCostField:
+                DrawBestCostField();
+                break;
+            case DebugOption.ShowFlowField:
+                DrawFlowField();
+                break;
+            default:
+                break;
+        }
+    }
+
+    public DebugOption GetDebugOption() { return _debugOption; }
 
     public void LabelCostField()
     {
-        if (tiles == null)
+        if (_grids == null)
             GenerateTileInfo();
 
-        for (int x = 0; x < tiles.GetLength(0); x++)
+        for (int x = 0; x < _grids.GetLength(0); x++)
         {
-            for (int y = 0; y < tiles.GetLength(1); y++)
+            for (int y = 0; y < _grids.GetLength(1); y++)
             {
-                Handles.Label(tiles[x, y].WorldPosition, tiles[x, y].Cost.ToString());
+                Handles.Label(_grids[x, y].WorldPosition, _grids[x, y].Cost.ToString());
+            }
+        }
+    }
+
+    public void LabelBestCostField()
+    {
+        if (_grids == null)
+            GenerateTileInfo();
+
+        for (int x = 0; x < _grids.GetLength(0); x++)
+        {
+            for (int y = 0; y < _grids.GetLength(1); y++)
+            {
+                Handles.Label(_grids[x, y].WorldPosition, _grids[x, y].BestCost.ToString());
             }
         }
     }
 
     private void DrawCostFieldCubes()
     {
-        if (tiles == null)
+        if (_grids == null)
             GenerateTileInfo();
 
-        for (int x = 0; x < tiles.GetLength(0); x++)
+        for (int x = 0; x < _grids.GetLength(0); x++)
         {
-            for (int y = 0; y < tiles.GetLength(1); y++)
+            for (int y = 0; y < _grids.GetLength(1); y++)
             {
-                float heightForCube = tiles[x, y].HeightForTileCube + 0.1f;
+                float heightForCube = _grids[x, y].HeightForTileCube + 0.1f;
                 Vector3 scale = new Vector3(1, heightForCube, 1);
-                float weight = (tiles[x, y].Cost - 1) / 254.0f;
-                Gizmos.color = new Color(weight, 1.0f - weight, 0.0f, 0.5f);
-                Gizmos.DrawCube(tiles[x, y].WorldPosition, scale);
+                float weight = (_grids[x, y].Cost - 1) / (byte.MaxValue - 1.0f);
+                Gizmos.color = new UnityEngine.Color(weight, 1.0f - weight, 0.0f, 1.0f);
+                Gizmos.DrawCube(_grids[x, y].WorldPosition, scale);
+            }
+        }
+    }
+
+    private void DrawBestCostField()
+    {
+        if (_grids == null)
+            GenerateTileInfo();
+
+        for (int x = 0; x < _grids.GetLength(0); x++)
+        {
+            for (int y = 0; y < _grids.GetLength(1); y++)
+            {
+                float heightForCube = _grids[x, y].HeightForTileCube + 0.1f;
+                Vector3 scale = new Vector3(1, heightForCube, 1);
+                float weight = (_grids[x, y].BestCost) / short.MaxValue;
+                Gizmos.color = new UnityEngine.Color(weight, 1.0f - weight, 0.0f, 1.0f);
+                Gizmos.DrawCube(_grids[x, y].WorldPosition, scale);
+            }
+        }
+    }
+
+    private void DrawFlowField()
+    {
+        if (_grids == null)
+            GenerateTileInfo();
+
+        for (int x = 0; x < _grids.GetLength(0); x++)
+        {
+            for (int y = 0; y < _grids.GetLength(1); y++)
+            {
+                Vector3 position = _grids[x, y].WorldPosition;
+                if (_grids[x, y].BestDirection == GridDirection.None)
+                {
+                    if (_grids[x, y].Cost == 0)
+                    {
+                        Gizmos.DrawIcon(position, "destination.png", false);
+                    }
+                    else 
+                    {
+                        Gizmos.DrawIcon(position, "none.jpg", false);
+                    }
+                }
+                else if (_grids[x, y].BestDirection == GridDirection.East)
+                    Gizmos.DrawIcon(position, "east.jpg", false);
+                else if (_grids[x, y].BestDirection == GridDirection.SouthEast)
+                    Gizmos.DrawIcon(position, "southeast.jpg", false);
+                else if (_grids[x, y].BestDirection == GridDirection.South)
+                    Gizmos.DrawIcon(position, "south.jpg", false);
+                else if (_grids[x, y].BestDirection == GridDirection.SouthWest)
+                    Gizmos.DrawIcon(position, "southwest.jpg", false);
+                else if (_grids[x, y].BestDirection == GridDirection.West)
+                    Gizmos.DrawIcon(position, "west.jpg", false);
+                else if (_grids[x, y].BestDirection == GridDirection.NorthWest)
+                    Gizmos.DrawIcon(position, "northwest.jpg", false);
+                else if (_grids[x, y].BestDirection == GridDirection.North)
+                    Gizmos.DrawIcon(position, "north.jpg", false);
+                else if (_grids[x, y].BestDirection == GridDirection.NorthEast)
+                    Gizmos.DrawIcon(position, "northeast.jpg", false);
+                float heightForCube = _grids[x, y].HeightForTileCube + 0.1f;
+                Vector3 scale = new Vector3(1, heightForCube, 1);
+                float weight = (_grids[x, y].BestCost) / short.MaxValue;
+                Gizmos.color = new UnityEngine.Color(weight, 1.0f - weight, 0.0f, 1.0f);
+                Gizmos.DrawCube(_grids[x, y].WorldPosition, scale);
             }
         }
     }

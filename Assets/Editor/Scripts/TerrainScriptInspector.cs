@@ -1,25 +1,20 @@
+using Codice.Client.BaseCommands;
+using System;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
+using static TerrainScript;
 
 [CustomEditor(typeof(TerrainScript))]
 public class TerrainScriptInspector : Editor
 {
-    private static Vector2 MousePosition => Event.current.mousePosition;
-    private static bool isShowWireCube = false;
-    private bool isRepaint = false;
+    private bool wasMouseDown = false;
 
     public override void OnInspectorGUI()
     {
         base.OnInspectorGUI();
 
         TerrainScript terrainScript = (TerrainScript)target;
-        string buttonName = isShowWireCube == false ? "Show wire cube on hovering tile" : "Hide wire cube on hovering tile";
-        if (GUILayout.Button(buttonName))
-        {
-            isShowWireCube = !isShowWireCube;
-        }
-
         if (GUILayout.Button("Regenerate Tile Info"))
         {
             terrainScript.GenerateTileInfo();
@@ -28,19 +23,31 @@ public class TerrainScriptInspector : Editor
 
     private void OnSceneGUI()
     {
-        TerrainScript script = target as TerrainScript;
-        if (script.GetDebugOption() == TerrainScript.DebugOption.ShowCostField) { script.LabelCostField(); }
-        
-
-        if (isShowWireCube)
+        TerrainScript terrainScript = target as TerrainScript;
+        switch (terrainScript.GetDebugOption())
         {
-            hoverTileCube();
+            case DebugOption.None:
+                break;
+            case DebugOption.ShowCostField:
+                terrainScript.LabelCostField();
+                break;
+            case DebugOption.ShowBestCostField:
+                terrainScript.LabelBestCostField();
+                break;
+            case DebugOption.ShowFlowField:
+                break;
+            default:
+                break;
         }
+        hoverTileCube();
 
-        if (isRepaint)
+        if (Event.current.type == EventType.MouseDown && Event.current.button == 0) {
+            pickDestination(terrainScript);
+            wasMouseDown = true;
+        }
+        else if (Event.current.type != EventType.MouseDown && wasMouseDown)
         {
-            isRepaint = false;
-            SceneView.RepaintAll();
+            wasMouseDown = false;
         }
     }
 
@@ -65,6 +72,23 @@ public class TerrainScriptInspector : Editor
         Handles.DrawWireCube(dest, Vector3.one);
         GUI.color = color;
         Handles.Label(dest, tempValue.ToString("F1"));
-        isRepaint = true;
+        SceneView.RepaintAll();
+    }
+
+    private void pickDestination(TerrainScript terrainScript)
+    {
+        Vector3 mousePosition = Event.current.mousePosition;
+        mousePosition.y = SceneView.lastActiveSceneView.camera.pixelHeight - mousePosition.y;
+        mousePosition.z = 1.0f;
+        mousePosition = SceneView.lastActiveSceneView.camera.ScreenToWorldPoint(mousePosition);
+
+        Vector3 yDir = Vector3.zero - new Vector3(0, mousePosition.y, 0);
+        Vector3 forward = (mousePosition - SceneView.lastActiveSceneView.camera.transform.position).normalized;
+        float m = Vector3.Dot(forward, yDir) / yDir.magnitude;
+        float n = mousePosition.y / m;
+        Vector3 dest = forward * n + mousePosition;
+        terrainScript.GenerateTileInfo();
+        terrainScript.GenerateIntegrationField(new Vector2Int((int)Mathf.Floor(dest.x), (int)Mathf.Floor(dest.z)));
+        terrainScript.GenerateFlowField();
     }
 }
