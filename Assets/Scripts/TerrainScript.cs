@@ -226,7 +226,7 @@ public class TerrainScript : MonoBehaviour
                 float heightForCube = _grids[x, y].HeightForTileCube + 0.1f;
                 Vector3 scale = new Vector3(1, heightForCube, 1);
                 float weight = (_grids[x, y].Cost - 1) / (byte.MaxValue - 1.0f);
-                Gizmos.color = new UnityEngine.Color(weight, 1.0f - weight, 0.0f, 1.0f);
+                Gizmos.color = new UnityEngine.Color(weight, 1.0f - weight, 0.0f, 0.5f);
                 Gizmos.DrawCube(_grids[x, y].WorldPosition, scale);
             }
         }
@@ -244,7 +244,7 @@ public class TerrainScript : MonoBehaviour
                 float heightForCube = _grids[x, y].HeightForTileCube + 0.1f;
                 Vector3 scale = new Vector3(1, heightForCube, 1);
                 float weight = (_grids[x, y].BestCost) / short.MaxValue;
-                Gizmos.color = new UnityEngine.Color(weight, 1.0f - weight, 0.0f, 1.0f);
+                Gizmos.color = new UnityEngine.Color(weight, 1.0f - weight, 0.0f, 0.5f);
                 Gizmos.DrawCube(_grids[x, y].WorldPosition, scale);
             }
         }
@@ -290,7 +290,7 @@ public class TerrainScript : MonoBehaviour
                 float heightForCube = _grids[x, y].HeightForTileCube + 0.1f;
                 Vector3 scale = new Vector3(1, heightForCube, 1);
                 float weight = (_grids[x, y].BestCost) / short.MaxValue;
-                Gizmos.color = new UnityEngine.Color(weight, 1.0f - weight, 0.0f, 1.0f);
+                Gizmos.color = new UnityEngine.Color(weight, 1.0f - weight, 0.0f, 0.5f);
                 Gizmos.DrawCube(_grids[x, y].WorldPosition, scale);
             }
         }
