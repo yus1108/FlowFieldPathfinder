@@ -8,7 +8,7 @@ using static TerrainScript;
 [CustomEditor(typeof(TerrainScript))]
 public class TerrainScriptInspector : Editor
 {
-    private bool wasMouseDown = false;
+    private bool _wasMouseDown = false;
 
     public override void OnInspectorGUI()
     {
@@ -43,11 +43,11 @@ public class TerrainScriptInspector : Editor
 
         if (Event.current.type == EventType.MouseDown && Event.current.button == 0) {
             pickDestination(terrainScript);
-            wasMouseDown = true;
+            _wasMouseDown = true;
         }
-        else if (Event.current.type != EventType.MouseDown && wasMouseDown)
+        else if (Event.current.type != EventType.MouseDown && _wasMouseDown)
         {
-            wasMouseDown = false;
+            _wasMouseDown = false;
         }
     }
 
